@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'dart:math' as math;
 import '../providers/printer_provider.dart';
 import '../models/printer.dart';
 import '../widgets/motion_deck.dart';
@@ -53,8 +54,8 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
                 const SizedBox(height: 24),
                 _buildTelemetry(context, provider, printer),
                 const SizedBox(height: 24),
-                if (printer.boxTurtle != null) ...[
-                   _buildBoxTurtleInfo(context, printer.boxTurtle!),
+                if (printer.afc != null && printer.afc!.lanes.isNotEmpty) ...[
+                   _buildAfcInfo(context, provider, printer, printer.afc!),
                    const SizedBox(height: 24),
                 ],
                 if (printer.currentSpool != null)
@@ -214,6 +215,18 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
         child: _tempCapsule("BED", printer.bedTemp, printer.targetBed, Colors.blue, List.generate(printer.history.length, (i) => FlSpot(i.toDouble(), printer.history[i].bed))))),
     ]);
   }
+  
+  Widget _tempCapsule(String label, double val, double target, Color color, List<FlSpot> spots) {
+    return Card(child: Container(height: 140, padding: const EdgeInsets.all(20), child: Stack(children: [
+      if (spots.length > 1) Positioned.fill(child: LineChart(LineChartData(minX: 0, maxX: 59, minY: 0, gridData: const FlGridData(show: false), titlesData: const FlTitlesData(show: false), borderData: FlBorderData(show: false),
+        lineBarsData: [LineChartBarData(spots: spots, isCurved: true, curveSmoothness: 0.1, color: color.withOpacity(0.3), barWidth: 3, dotData: const FlDotData(show: false), belowBarData: BarAreaData(show: false))]))),
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.white38, fontWeight: FontWeight.bold)),
+        Text("${val.round()}°", style: GoogleFonts.anton(fontSize: 32)),
+        Text("/ ${target.round()}°", style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white38)),
+      ])
+    ])));
+  }
 
   Widget _buildEmptySpoolInfo(BuildContext context, String printerId) {
     return InkWell(
@@ -311,7 +324,8 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
     );
   }
 
-  Widget _buildBoxTurtleInfo(BuildContext context, BoxTurtle boxTurtle) {
+  Widget _buildAfcInfo(BuildContext context, PrinterProvider provider, Printer printer, AFC afc) {
+    if (afc.lanes.isEmpty) return const SizedBox();
     return Card(
       color: Colors.white.withOpacity(0.02),
       child: Padding(
@@ -325,7 +339,14 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
                 const SizedBox(width: 12),
                 Text("BOX TURTLE AFC", style: GoogleFonts.anton(fontSize: 18, letterSpacing: 0.5)),
                 const Spacer(),
-                Text(boxTurtle.status.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white38)),
+                TextButton.icon(
+                  onPressed: () => provider.afcAction(printer.id, 'eject'),
+                  icon: const Icon(LucideIcons.arrowUpFromLine, size: 14),
+                  label: const Text("EJECT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                  style: TextButton.styleFrom(foregroundColor: Colors.orangeAccent),
+                ),
+                const SizedBox(width: 8),
+                Text(afc.status.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white38)),
               ],
             ),
             const SizedBox(height: 16),
@@ -333,37 +354,41 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
               height: 100,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                itemCount: boxTurtle.lanes.length,
+                itemCount: afc.lanes.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 12),
                 itemBuilder: (context, index) {
-                  final lane = boxTurtle.lanes[index];
-                  final isActive = boxTurtle.activeLane == lane.id;
+                  final lane = afc.lanes[index];
+                  final isActive = afc.activeLane == lane.id;
                   final color = lane.color != null ? Color(int.parse("0xFF${lane.color!.replaceAll('#', '')}")) : Colors.grey;
                   
-                  return Container(
-                    width: 80,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isActive ? color.withOpacity(0.2) : Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: isActive ? color : Colors.transparent, width: 2),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 32, height: 32,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            boxShadow: isActive ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 10)] : null,
+                  return InkWell(
+                    onTap: () => _showLaneEditDialog(context, provider, printer, lane),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      width: 80,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isActive ? color.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: isActive ? color : Colors.transparent, width: 2),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 32, height: 32,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              boxShadow: isActive ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 10)] : null,
+                            ),
+                            child: isActive ? const Icon(LucideIcons.check, size: 16, color: Colors.white) : null,
                           ),
-                          child: isActive ? const Icon(LucideIcons.check, size: 16, color: Colors.white) : null,
-                        ),
-                        const Spacer(),
-                        Text(lane.name ?? "L${lane.id}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        Text(lane.material ?? "UNK", style: const TextStyle(fontSize: 10, color: Colors.white54)),
-                      ],
+                          const Spacer(),
+                          Text(lane.name ?? "L${lane.id}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          Text(lane.material ?? "UNK", style: const TextStyle(fontSize: 10, color: Colors.white54)),
+                        ],
+                      ),
                     ),
                   );
                 },
@@ -375,6 +400,212 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
     );
   }
 
+  void _showLaneEditDialog(BuildContext context, PrinterProvider provider, Printer printer, AFCLane lane) {
+    final materialController = TextEditingController(text: lane.material);
+    final colorController = TextEditingController(text: lane.color?.replaceAll('#', '') ?? 'FFFFFF');
+    int? selectedSpoolId;
+    Color currentColor = lane.color != null ? Color(int.parse("0xFF${lane.color!.replaceAll('#', '')}")) : Colors.white;
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          title: Text("EDIT LANE ${lane.id}", style: GoogleFonts.anton(fontSize: 18)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: () => provider.afcAction(printer.id, 'load', laneId: lane.id),
+                        icon: const Icon(LucideIcons.arrowDownToLine, size: 16),
+                        label: const Text("LOAD"),
+                        style: TextButton.styleFrom(foregroundColor: Colors.greenAccent),
+                      ),
+                    ),
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: () => provider.afcAction(printer.id, 'unload', laneId: lane.id),
+                        icon: const Icon(LucideIcons.arrowUpToLine, size: 16),
+                        label: const Text("UNLOAD"),
+                        style: TextButton.styleFrom(foregroundColor: Colors.orangeAccent),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(color: Colors.white10),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () {
+                     _showSpoolSelectionDialog(context, provider, (spool) {
+                        setState(() {
+                          materialController.text = "${spool.vendor} ${spool.material}";
+                          if (spool.color != null) {
+                             colorController.text = spool.color!.replaceAll('#', '');
+                             currentColor = Color(int.parse("0xFF${spool.color!.replaceAll('#', '')}"));
+                          }
+                          selectedSpoolId = spool.id;
+                        });
+                     });
+                  },
+                  icon: const Icon(LucideIcons.database),
+                  label: const Text("LOAD FROM SPOOLMAN"),
+                ),
+                const SizedBox(height: 16),
+                TextField(controller: materialController, decoration: const InputDecoration(labelText: "Material (e.g. PLA)")),
+                const SizedBox(height: 16),
+                const Align(alignment: Alignment.centerLeft, child: Text("COLOR", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                const SizedBox(height: 8),
+                _SimpleColorPicker(
+                  initialColor: currentColor,
+                  onColorChanged: (c) {
+                    currentColor = c;
+                    colorController.text = c.value.toRadixString(16).substring(2).toUpperCase();
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
+            ElevatedButton(
+              onPressed: () {
+                provider.updateAfcLane(printer.id, lane.id, materialController.text, colorController.text, spoolId: selectedSpoolId);
+                Navigator.pop(context);
+              },
+              child: const Text("SAVE"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSpoolSelectionDialog(BuildContext context, PrinterProvider provider, Function(Spool) onSelect) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              Container(margin: const EdgeInsets.only(top: 12), width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2))),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Row(children: [Icon(LucideIcons.database, color: Theme.of(context).colorScheme.primary), const SizedBox(width: 12), Text("SELECT SPOOL", style: GoogleFonts.anton(fontSize: 24))]),
+              ),
+              Expanded(
+                child: FutureBuilder<List<Spool>>(
+                  future: provider.fetchAllSpools(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text("NO SPOOLS FOUND"));
+                    
+                    return ListView.builder(
+                      controller: scrollController,
+                      itemCount: snapshot.data!.length,
+                      itemBuilder: (context, index) {
+                        final spool = snapshot.data![index];
+                        return ListTile(
+                          leading: CircleAvatar(backgroundColor: spool.color != null ? Color(int.parse("0xFF${spool.color!.replaceAll('#', '')}")) : Colors.grey),
+                          title: Text("${spool.vendor} ${spool.material}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(spool.name, style: const TextStyle(color: Colors.white54)),
+                          onTap: () {
+                            onSelect(spool);
+                            Navigator.pop(context);
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildPrintingStatusHeader(Printer printer) {
+    return Card(
+      color: Colors.white.withOpacity(0.02),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(16),
+                image: printer.thumbnailUrl != null 
+                  ? DecorationImage(image: NetworkImage(printer.thumbnailUrl!), fit: BoxFit.cover)
+                  : null,
+              ),
+              child: printer.thumbnailUrl == null 
+                ? const Icon(LucideIcons.fileCode, color: Colors.white24)
+                : null,
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    printer.currentFile?.toUpperCase() ?? "UNKNOWN FILE",
+                    style: const TextStyle(fontSize: 10, color: Colors.white38, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    printer.status == 'paused' ? "PAUSED" : "PRINTING",
+                    style: GoogleFonts.anton(fontSize: 24, letterSpacing: 1, color: printer.status == 'paused' ? Colors.orange : Colors.white),
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: printer.progress / 100,
+                    backgroundColor: Colors.white10,
+                    color: Theme.of(context).colorScheme.secondary,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 20),
+            Text(
+              "${printer.progress}%",
+              style: GoogleFonts.anton(fontSize: 32, color: Theme.of(context).colorScheme.secondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTempDialog(BuildContext context, PrinterProvider provider, Printer printer, String type) {
+    final controller = TextEditingController();
+    showDialog(context: context, builder: (context) => AlertDialog(backgroundColor: Theme.of(context).colorScheme.surface, title: Text("SET ${type.toUpperCase()} TEMP", style: GoogleFonts.anton()),
+      content: TextField(controller: controller, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "TEMPERATURE (°C)")),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")), ElevatedButton(onPressed: () {
+        final temp = int.tryParse(controller.text);
+        if (temp != null) provider.sendCommand(printer.id, '/printer/gcode/script?script=${type == 'extruder' ? 'M104' : 'M140'} S$temp');
+        Navigator.pop(context);
+      }, child: const Text("SET"))]));
+  }
+  
   Widget _buildTabCard(BuildContext context, PrinterProvider provider, Printer printer, bool isPrinting) {
     return DefaultTabController(
       length: isPrinting ? 2 : 3,
@@ -595,86 +826,6 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
         IconButton.filled(onPressed: () => provider.sendCommand(printer.id, '/printer/emergency_stop'), icon: const Icon(LucideIcons.alertCircle), style: IconButton.styleFrom(backgroundColor: Colors.redAccent, minimumSize: const Size(56, 56))),
       ]));
   }
-
-  Widget _tempCapsule(String label, double val, double target, Color color, List<FlSpot> spots) {
-    return Card(child: Container(height: 140, padding: const EdgeInsets.all(20), child: Stack(children: [
-      if (spots.length > 1) LineChart(LineChartData(minX: 0, maxX: 59, minY: 0, gridData: const FlGridData(show: false), titlesData: const FlTitlesData(show: false), borderData: FlBorderData(show: false),
-        lineBarsData: [LineChartBarData(spots: spots, isCurved: true, curveSmoothness: 0.1, color: color.withOpacity(0.3), barWidth: 3, dotData: const FlDotData(show: false), belowBarData: BarAreaData(show: false))])),
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.white38, fontWeight: FontWeight.bold)),
-        Text("${val.round()}°", style: GoogleFonts.anton(fontSize: 32)),
-        Text("/ ${target.round()}°", style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white38)),
-      ])
-    ])));
-  }
-
-  Widget _buildPrintingStatusHeader(Printer printer) {
-    return Card(
-      color: Colors.white.withOpacity(0.02),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.black26,
-                borderRadius: BorderRadius.circular(16),
-                image: printer.thumbnailUrl != null 
-                  ? DecorationImage(image: NetworkImage(printer.thumbnailUrl!), fit: BoxFit.cover)
-                  : null,
-              ),
-              child: printer.thumbnailUrl == null 
-                ? const Icon(LucideIcons.fileCode, color: Colors.white24)
-                : null,
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    printer.currentFile?.toUpperCase() ?? "UNKNOWN FILE",
-                    style: const TextStyle(fontSize: 10, color: Colors.white38, fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    printer.status == 'paused' ? "PAUSED" : "PRINTING",
-                    style: GoogleFonts.anton(fontSize: 24, letterSpacing: 1, color: printer.status == 'paused' ? Colors.orange : Colors.white),
-                  ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: printer.progress / 100,
-                    backgroundColor: Colors.white10,
-                    color: Theme.of(context).colorScheme.secondary,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 20),
-            Text(
-              "${printer.progress}%",
-              style: GoogleFonts.anton(fontSize: 32, color: Theme.of(context).colorScheme.secondary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showTempDialog(BuildContext context, PrinterProvider provider, Printer printer, String type) {
-    final controller = TextEditingController();
-    showDialog(context: context, builder: (context) => AlertDialog(backgroundColor: Theme.of(context).colorScheme.surface, title: Text("SET ${type.toUpperCase()} TEMP", style: GoogleFonts.anton()),
-      content: TextField(controller: controller, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "TEMPERATURE (°C)")),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")), ElevatedButton(onPressed: () {
-        final temp = int.tryParse(controller.text);
-        if (temp != null) provider.sendCommand(printer.id, '/printer/gcode/script?script=${type == 'extruder' ? 'M104' : 'M140'} S$temp');
-        Navigator.pop(context);
-      }, child: const Text("SET"))]));
-  }
 }
 
 class _DraggablePopup extends StatelessWidget {
@@ -826,4 +977,133 @@ class ObjectsView extends StatelessWidget {
       },
     );
   }
+}
+
+class _SimpleColorPicker extends StatefulWidget {
+  final Color initialColor;
+  final ValueChanged<Color> onColorChanged;
+  const _SimpleColorPicker({required this.initialColor, required this.onColorChanged});
+
+  @override
+  State<_SimpleColorPicker> createState() => _SimpleColorPickerState();
+}
+
+class _SimpleColorPickerState extends State<_SimpleColorPicker> {
+  late HSVColor _hsv;
+
+  @override
+  void initState() {
+    super.initState();
+    _hsv = HSVColor.fromColor(widget.initialColor);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Preview
+        Container(
+          height: 50,
+          decoration: BoxDecoration(
+            color: _hsv.toColor(),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white10),
+            boxShadow: [BoxShadow(color: _hsv.toColor().withOpacity(0.3), blurRadius: 10)],
+          ),
+          child: Center(
+            child: Text(
+              "#${_hsv.toColor().value.toRadixString(16).substring(2).toUpperCase()}",
+              style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, color: _hsv.value > 0.5 ? Colors.black : Colors.white),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        // Wheel
+        Center(
+          child: GestureDetector(
+            onPanUpdate: (details) => _handleHueTouch(details.localPosition, const Size(200, 200)),
+            onPanDown: (details) => _handleHueTouch(details.localPosition, const Size(200, 200)),
+            child: CustomPaint(
+              size: const Size(200, 200),
+              painter: _ColorWheelPainter(hsv: _hsv),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        // Sliders for Saturation and Value
+        _sliderRow("SATURATION", _hsv.saturation, (val) => setState(() {
+          _hsv = _hsv.withSaturation(val);
+          widget.onColorChanged(_hsv.toColor());
+        })),
+        _sliderRow("BRIGHTNESS", _hsv.value, (val) => setState(() {
+          _hsv = _hsv.withValue(val);
+          widget.onColorChanged(_hsv.toColor());
+        })),
+      ],
+    );
+  }
+
+  Widget _sliderRow(String label, double value, ValueChanged<double> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white38)),
+        Slider(value: value, min: 0, max: 1, onChanged: onChanged),
+      ],
+    );
+  }
+
+  void _handleHueTouch(Offset localPosition, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final offset = localPosition - center;
+    double angle = math.atan2(offset.dy, offset.dx) * 180 / math.pi;
+    if (angle < 0) angle += 360;
+    setState(() {
+      _hsv = _hsv.withHue(angle);
+      widget.onColorChanged(_hsv.toColor());
+    });
+  }
+}
+
+class _ColorWheelPainter extends CustomPainter {
+  final HSVColor hsv;
+  _ColorWheelPainter({required this.hsv});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final thickness = 25.0;
+
+    // Draw Hue Ring
+    for (int i = 0; i < 360; i++) {
+      final paint = Paint()
+        ..color = HSVColor.fromAHSV(1, i.toDouble(), 1, 1).toColor()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = thickness;
+      
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius - thickness / 2),
+        i * math.pi / 180,
+        1.1 * math.pi / 180,
+        false,
+        paint,
+      );
+    }
+
+    // Indicator
+    final angle = hsv.hue * math.pi / 180;
+    final indicatorOffset = center + Offset(math.cos(angle), math.sin(angle)) * (radius - thickness / 2);
+    
+    canvas.drawCircle(indicatorOffset, thickness / 2 + 4, Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 3);
+    canvas.drawCircle(indicatorOffset, thickness / 2, Paint()..color = hsv.toColor());
+    
+    // Inner Circle showing saturation/value
+    final innerRadius = radius - thickness - 10;
+    final innerPaint = Paint()..color = hsv.toColor();
+    canvas.drawCircle(center, innerRadius, innerPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

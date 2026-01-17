@@ -125,6 +125,7 @@ class DashboardScreen extends StatelessWidget {
                 items: const [
                   DropdownMenuItem(value: 'dark', child: Text("Aubergine (Dark)")),
                   DropdownMenuItem(value: 'expressive', child: Text("Material 3 Expressive")),
+                  DropdownMenuItem(value: 'liquid', child: Text("Liquid Glass")),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => selectedTheme = v);

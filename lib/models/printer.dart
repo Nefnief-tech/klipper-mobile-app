@@ -56,7 +56,7 @@ class AFCLane {
   final String? material;
   final String? color; // Hex color string
   final String? name;
-  final double? remaining;
+
 
   AFCLane({
     required this.id,
@@ -64,16 +64,15 @@ class AFCLane {
     this.material,
     this.color,
     this.name,
-    this.remaining,
   });
 }
 
-class BoxTurtle {
+class AFC {
   final List<AFCLane> lanes;
   final int? activeLane;
-  final String status; // ready, changing, error
+  final String status;
 
-  BoxTurtle({
+  AFC({
     required this.lanes,
     this.activeLane,
     required this.status,
@@ -99,7 +98,7 @@ class Printer {
   List<TempPoint> history;
   List<KlipperDevice> devices;
   Spool? currentSpool;
-  BoxTurtle? boxTurtle;
+  AFC? afc;
 
   Printer({
     required this.id,
@@ -120,7 +119,7 @@ class Printer {
     this.history = const [],
     this.devices = const [],
     this.currentSpool,
-    this.boxTurtle,
+    this.afc,
   });
 
   Printer copyWith({
@@ -139,7 +138,7 @@ class Printer {
     List<TempPoint>? history,
     List<KlipperDevice>? devices,
     Spool? currentSpool,
-    BoxTurtle? boxTurtle,
+    AFC? afc,
   }) {
     return Printer(
       id: id,
@@ -160,7 +159,7 @@ class Printer {
       history: history ?? this.history,
       devices: devices ?? this.devices,
       currentSpool: currentSpool ?? this.currentSpool,
-      boxTurtle: boxTurtle ?? this.boxTurtle,
+      afc: afc ?? this.afc,
     );
   }
 }

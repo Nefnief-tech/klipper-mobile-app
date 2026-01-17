@@ -1,0 +1,24 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8A3FD6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4A1F76;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="220" fill="#1A1020"/>
+  
+  <!-- Stylized Isometric Cube (The Print) -->
+  <path d="M512 300 L762 425 V675 L512 800 L262 675 V425 Z" fill="none" stroke="url(#grad)" stroke-width="60" stroke-linejoin="round"/>
+  <path d="M262 425 L512 550 L762 425" fill="none" stroke="url(#grad)" stroke-width="60" stroke-linejoin="round"/>
+  <path d="M512 550 V800" fill="none" stroke="url(#grad)" stroke-width="60" stroke-linejoin="round"/>
+  
+  <!-- The Nozzle / Print Head -->
+  <path d="M512 120 V260" stroke="#DFFF4F" stroke-width="40" stroke-linecap="round"/>
+  <circle cx="512" cy="120" r="40" fill="#DFFF4F"/>
+  
+  <!-- Connecting Dots (Farm/Network concept) -->
+  <circle cx="262" cy="425" r="20" fill="#8A3FD6"/>
+  <circle cx="762" cy="425" r="20" fill="#8A3FD6"/>
+  <circle cx="512" cy="800" r="20" fill="#8A3FD6"/>
+</svg>

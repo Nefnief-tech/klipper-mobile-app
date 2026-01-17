@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp"
+    android:background="@android:color/black">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_centerInParent="true">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FARM STATUS"
+            android:textColor="#BB86FC"
+            android:textStyle="bold"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/widget_printing"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Printing: 0"
+            android:textColor="@android:color/white"
+            android:textSize="18sp"
+            android:layout_marginTop="4dp"/>
+
+        <TextView
+            android:id="@+id/widget_idle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Idle: 0"
+            android:textColor="#88ffffff"
+            android:textSize="14sp" />
+    </LinearLayout>
+</RelativeLayout>

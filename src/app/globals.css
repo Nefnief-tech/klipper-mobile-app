@@ -1,26 +1,273 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* @plugin "tailwindcss-animate"; */
 
-@theme inline {
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-display: var(--font-anton), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  :root {
+    /* Lilac Pop Palette */
+    --background: 255 100% 91%; /* #DCD0FF - Pale Lavender */
+    --foreground: 274 41% 7%; /* #120A18 - Deep Aubergine */
+    
+    --card: 271 100% 95%; /* #F3E6FF - Light Pink-White */
+    --card-foreground: 274 41% 7%;
+
+    --popover: 0 0% 100%; /* Pure White */
+    --popover-foreground: 274 41% 7%;
+
+    --primary: 272 63% 46%; /* #7B2CBF - Electric Purple */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 73 100% 65%; /* #DFFF4F - Acid Lime */
+    --secondary-foreground: 274 41% 7%;
+
+    --muted: 271 100% 95%; /* Use Card color for muted areas to blend */
+    --muted-foreground: 274 10% 40%; /* Dark Gray */
+
+    --accent: 73 100% 65%; /* Acid Lime again for accents */
+    --accent-foreground: 274 41% 7%;
+
+    --destructive: 0 100% 71%; /* #FF6B6B - Sunset Red */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 272 63% 46%; /* Electric Purple, low opacity usually */
+    --input: 0 0% 100%;
+    --ring: 272 63% 46%;
+
+    --radius: 1.5rem; /* 24px - Heavy rounded */
+
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    
+    /* Sidebar specific */
+    --sidebar-background: 274 41% 7%; /* Deep Aubergine for contrast */
+    --sidebar-foreground: 255 100% 91%;
+    --sidebar-primary: 272 63% 46%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 272 63% 46%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 272 63% 46%;
+    --sidebar-ring: 272 63% 46%;
+  }
+
+  .dark {
+    /* Dark Mode (Immersive Aubergine) */
+    --background: 274 45% 5%; /* #0D0512 - Deepest Aubergine */
+    --foreground: 255 100% 96%; /* #FAFAFF - White with tiny purple tint */
+
+    --card: 274 35% 10%; /* #1A1020 - Lighter Aubergine Surface */
+    --card-foreground: 255 100% 96%;
+
+    --popover: 274 35% 10%;
+    --popover-foreground: 255 100% 96%;
+
+    --primary: 272 63% 55%; /* #8A3FD6 - Slightly lighter Electric Purple for dark mode contrast */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 272 63% 55%; /* Use Purple as requested for accent/secondary too, or keep lime? User said "purple colour as accent" */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 274 30% 15%;
+    --muted-foreground: 274 10% 65%;
+
+    --accent: 272 63% 55%; /* Purple Accent */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 274 30% 20%;
+    --input: 274 30% 15%;
+    --ring: 272 63% 55%;
+    
+    --sidebar-background: 274 35% 10%;
+    --sidebar-foreground: 255 100% 96%;
+    --sidebar-primary: 272 63% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 272 63% 55%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 274 30% 20%;
+    --sidebar-ring: 272 63% 55%;
+  }
+
+  .expressive {
+    --background: 260 40% 5%;
+    --foreground: 260 20% 98%;
+
+    --card: 260 30% 10%;
+    --card-foreground: 260 20% 98%;
+
+    --popover: 260 30% 10%;
+    --popover-foreground: 260 20% 98%;
+
+    --primary: 320 80% 60%; /* Vibrant Magenta/Pink */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 190 90% 50%; /* Vibrant Cyan */
+    --secondary-foreground: 260 40% 5%;
+
+    --muted: 260 25% 15%;
+    --muted-foreground: 260 15% 70%;
+
+    --accent: 45 100% 60%; /* Golden Yellow/Orange */
+    --accent-foreground: 260 40% 5%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 260 30% 20%;
+    --input: 260 30% 15%;
+    --ring: 320 80% 60%;
+
+    --radius: 2rem; /* Even more rounded for expressive */
+
+    --sidebar-background: 260 40% 4%;
+    --sidebar-foreground: 260 20% 98%;
+    --sidebar-primary: 320 80% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 190 90% 50%;
+    --sidebar-accent-foreground: 260 40% 5%;
+    --sidebar-border: 260 30% 20%;
+    --sidebar-ring: 320 80% 60%;
+  }
+
+  .liquid {
+    /* Liquid Glass Theme */
+    --background: 220 60% 8%; /* Deep Ocean Blue */
+    --foreground: 195 90% 95%; /* Icy White */
+
+    /* Glassy Card - distinct from background, semi-transparent */
+    --card: 220 50% 15% / 0.4;
+    --card-foreground: 195 90% 95%;
+
+    --popover: 220 50% 10% / 0.8;
+    --popover-foreground: 195 90% 95%;
+
+    --primary: 190 100% 50%; /* Electric Cyan */
+    --primary-foreground: 220 60% 8%;
+
+    --secondary: 320 100% 60%; /* Neon Pink */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 220 50% 15% / 0.4;
+    --muted-foreground: 220 30% 70%;
+
+    --accent: 190 100% 50%;
+    --accent-foreground: 220 60% 8%;
+
+    --destructive: 0 100% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 190 100% 50% / 0.3;
+    --input: 220 50% 15% / 0.4;
+    --ring: 190 100% 50%;
+
+    --radius: 1.5rem;
+
+    --sidebar-background: 220 60% 5%;
+    --sidebar-foreground: 195 90% 95%;
+    --sidebar-primary: 190 100% 50%;
+    --sidebar-primary-foreground: 220 60% 8%;
+    --sidebar-accent: 320 100% 60%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 190 100% 50% / 0.3;
+    --sidebar-ring: 190 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+  /* Typography Overrides */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-wide uppercase;
+  }
+
+  /* Glassmorphism Utilities for Liquid Theme */
+  .liquid [data-slot="card"],
+  .liquid [data-slot="dropdown-menu-content"], 
+  .liquid [data-slot="popover-content"] {
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
 }

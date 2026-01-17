@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:home_widget/home_widget.dart';
 import '../models/printer.dart';
 import '../services/database_helper.dart';
 import '../services/notification_service.dart';
@@ -19,6 +20,7 @@ class PrinterProvider with ChangeNotifier {
   final Map<String, WebSocketChannel> _channels = {};
   final Map<String, StreamSubscription> _subscriptions = {};
   final Map<String, DateTime> _lastNotificationUpdate = {};
+  Timer? _pollingTimer;
   bool _isPaused = false;
   String? _spoolmanUrl;
   String? get spoolmanUrl => _spoolmanUrl;
@@ -41,6 +43,16 @@ class PrinterProvider with ChangeNotifier {
     _printers = saved.map((p) => Printer(id: p['id'], name: p['name'], ip: p['ip'])).toList();
     notifyListeners();
     reconnectAll();
+    
+    // Start background polling for AFC and status updates every 20 seconds
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 20), (timer) {
+      if (!_isPaused) {
+        for (var p in _printers) {
+          if (p.status != 'offline') refreshPrinter(p.id);
+        }
+      }
+    });
   }
 
   void disconnectAll() {
@@ -48,11 +60,13 @@ class PrinterProvider with ChangeNotifier {
     for (var c in _channels.values) { c.sink.close(); }
     _subscriptions.clear();
     _channels.clear();
+    _pollingTimer?.cancel();
   }
 
   void reconnectAll() {
     if (_isPaused) return;
     for (var p in _printers) { connectWebSocket(p.id); }
+    if (_pollingTimer == null || !_pollingTimer!.isActive) init();
   }
 
   void pause() {
@@ -70,6 +84,7 @@ class PrinterProvider with ChangeNotifier {
   @override
   void dispose() {
     disconnectAll();
+    _pollingTimer?.cancel();
     super.dispose();
   }
 
@@ -124,7 +139,7 @@ class PrinterProvider with ChangeNotifier {
       "exclude_object": null,
       "fan": null,
       "spoolman": null,
-      "box_turtle": null
+      "AFC": null
     };
 
     // Add specifically discovered devices so we get real-time updates for them
@@ -297,35 +312,126 @@ class PrinterProvider with ChangeNotifier {
         excludeObject: ex,
         history: history,
         devices: _parseDevices(update, printer.devices),
-        boxTurtle: _parseBoxTurtle(update, printer.boxTurtle),
+        afc: _parseAfc(update, printer.afc),
       );
+      _updateWidget();
       notifyListeners();
     }
   }
 
-  BoxTurtle? _parseBoxTurtle(Map<String, dynamic> update, BoxTurtle? current) {
-    if (update['box_turtle'] == null) return current;
-    final raw = update['box_turtle'];
-    
-    List<AFCLane> lanes = current?.lanes ?? [];
-    if (raw['lanes'] != null && raw['lanes'] is List) {
-       lanes = [];
-       for (var i = 0; i < raw['lanes'].length; i++) {
-         final l = raw['lanes'][i];
-         lanes.add(AFCLane(
-            id: i,
-            status: l['status']?.toString() ?? 'unknown',
-            material: l['material']?.toString(),
-            color: l['color']?.toString(),
-            name: l['name']?.toString() ?? 'Lane ${i+1}',
-         ));
-       }
+  void _updateWidget() {
+    try {
+      final printing = _printers.where((p) => p.status == 'printing').length;
+      final idle = _printers.where((p) => p.status == 'idle').length;
+
+      HomeWidget.saveWidgetData<int>('printing_count', printing);
+      HomeWidget.saveWidgetData<int>('idle_count', idle);
+      HomeWidget.updateWidget(
+        androidName: 'StatusWidgetProvider',
+      );
+    } catch (_) {}
+  }
+
+  AFC? _parseAfc(Map<String, dynamic> update, AFC? current) {
+    final rawAfc = update['afc'] ?? update['AFC'];
+    if (rawAfc == null || rawAfc is! Map) return current;
+
+    debugPrint("[AFC] raw: ${jsonEncode(rawAfc)}");
+
+    List<AFCLane> lanes = [];
+    String? activeLaneName;
+    String overallStatus = current?.status ?? 'Unknown';
+
+    // 1. Attempt to find active lane info (often at root or in system)
+    if (rawAfc['system'] is Map) {
+      final systemData = rawAfc['system'];
+      activeLaneName = systemData['current_load'] as String?;
+      if (systemData['buffers'] is Map && systemData['buffers'].isNotEmpty) {
+        final firstBufferKey = systemData['buffers'].keys.first;
+        final firstBuffer = systemData['buffers'][firstBufferKey];
+        if (firstBuffer is Map && firstBuffer['state'] != null) {
+          overallStatus = firstBuffer['state'].toString();
+        }
+      }
+    }
+    if (activeLaneName == null && rawAfc.containsKey('current_load')) {
+       activeLaneName = rawAfc['current_load']?.toString();
     }
     
-    return BoxTurtle(
+    // 2. Identify the container having the lanes data
+    Map<String, dynamic> dataContainer = Map<String, dynamic>.from(rawAfc);
+    if (rawAfc.containsKey('status:') && rawAfc['status:'] is Map) {
+         final statusMap = rawAfc['status:'] as Map<String, dynamic>;
+         if (statusMap.containsKey('AFC') && statusMap['AFC'] is Map) {
+             dataContainer = statusMap['AFC'];
+         }
+    } else if (rawAfc.containsKey('AFC') && rawAfc['AFC'] is Map) {
+         dataContainer = rawAfc['AFC'];
+    }
+
+    // 3. Find the unit (e.g., "Turtle_1") that contains the lanes.
+    String? unitKey;
+    for (final key in dataContainer.keys) {
+      if (dataContainer[key] is Map && (dataContainer[key] as Map).containsKey('lane1')) {
+        unitKey = key;
+        break;
+      }
+    }
+
+    if (unitKey != null) {
+      final unitData = dataContainer[unitKey] as Map<String, dynamic>;
+      // Iterate through the keys of the unit to find lanes
+      unitData.forEach((key, value) {
+        if (key.startsWith('lane') && value is Map && value.containsKey('lane')) {
+          lanes.add(AFCLane(
+            id: (value['lane'] is int) ? value['lane'] : int.tryParse(value['lane'].toString()) ?? -1,
+            status: value['status']?.toString() ?? 'unknown',
+            material: value['material']?.toString(),
+            color: value['color']?.toString(),
+            name: value['name']?.toString() ?? key,
+          ));
+        }
+      });
+    } else {
+       // Fallback: Check if lanes are at the root level of dataContainer
+       dataContainer.forEach((key, value) {
+        if (key.startsWith('lane') && value is Map && value.containsKey('lane')) {
+          lanes.add(AFCLane(
+            id: (value['lane'] is int) ? value['lane'] : int.tryParse(value['lane'].toString()) ?? -1,
+            status: value['status']?.toString() ?? 'unknown',
+            material: value['material']?.toString(),
+            color: value['color']?.toString(),
+            name: value['name']?.toString() ?? key,
+          ));
+        }
+      });
+    }
+
+    // Convert active lane name to ID
+    int? activeLaneId;
+    if (activeLaneName != null) {
+      // The sample output is "lane4", so we search by name.
+      final matchingLane = lanes.firstWhere((l) => l.name == activeLaneName, orElse: () => AFCLane(id: -1, status: ''));
+      if (matchingLane.id != -1) {
+        activeLaneId = matchingLane.id;
+      }
+    }
+
+    // Sort lanes by ID for consistent UI
+    if (lanes.isNotEmpty) {
+      lanes.sort((a, b) => a.id.compareTo(b.id));
+    } else if (current != null) {
+      lanes = List.from(current.lanes);
+    }
+
+    if (activeLaneId == null && current != null) {
+      activeLaneId = current.activeLane;
+    }
+
+    return AFC(
       lanes: lanes,
-      activeLane: raw['active_lane'] ?? current?.activeLane,
-      status: raw['status'] ?? current?.status ?? 'ready',
+      activeLane: activeLaneId,
+      status: overallStatus,
     );
   }
 
@@ -377,16 +483,32 @@ class PrinterProvider with ChangeNotifier {
     final baseUrl = _baseUrl(printer.ip);
     try {
       final results = await Future.wait([
-        http.get(Uri.parse('$baseUrl/printer/objects/query?print_stats&display_status&heater_bed&extruder&virtual_sdcard&exclude_object&box_turtle')),
+        http.get(Uri.parse('$baseUrl/printer/objects/query?print_stats&display_status&heater_bed&extruder&virtual_sdcard&exclude_object&AFC')),
         http.get(Uri.parse('$baseUrl/server/files/list?root=gcodes')),
         http.get(Uri.parse('$baseUrl/printer/objects/list')),
         http.get(Uri.parse('$baseUrl/server/spoolman/active_spool')).timeout(const Duration(seconds: 5), onTimeout: () => http.Response('{"error": "timeout"}', 408)),
+        http.get(Uri.parse('$baseUrl/printer/afc/status')).timeout(const Duration(seconds: 5), onTimeout: () => http.Response('{"error": "timeout"}', 408)),
       ]);
 
       if (results[0].statusCode == 200) {
         final data = jsonDecode(results[0].body)['result']['status'];
         final stats = data['print_stats'];
         final exRaw = data['exclude_object'];
+        
+        // Process AFC from dedicated endpoint if available
+        if (results[4].statusCode == 200) {
+          try {
+            final afcRes = jsonDecode(results[4].body);
+            if (afcRes['result'] != null) {
+              // Merge status data into object data to preserve lane details
+              if (data['AFC'] != null && data['AFC'] is Map) {
+                (data['AFC'] as Map).addAll(afcRes['result']);
+              } else {
+                data['AFC'] = afcRes['result'];
+              }
+            }
+          } catch (_) {}
+        }
         
         // Process Spoolman
         Spool? activeSpool;
@@ -505,11 +627,12 @@ class PrinterProvider with ChangeNotifier {
           ),
           devices: _parseDevices(fullObjectStates, printer.devices),
           currentSpool: activeSpool,
-          boxTurtle: _parseBoxTurtle(data, null),
+          afc: _parseAfc(data, null),
         );
         
         // If we found new devices, update the subscription
         _sendSubscription(id);
+        _updateWidget();
         
         notifyListeners();
       }
@@ -643,6 +766,50 @@ class PrinterProvider with ChangeNotifier {
       debugPrint("Set Spool Error: $e");
       rethrow;
     }
+  }
+
+  Future<void> updateAfcLane(String printerId, int laneId, String material, String color, {int? spoolId}) async {
+    final String laneName = 'lane$laneId';
+    List<String> commands = [];
+
+    if (spoolId != null) {
+      commands.add('SET_SPOOL_ID LANE=$laneName SPOOL_ID=$spoolId');
+    } else {
+      // Manual updates if no Spoolman ID is used
+      if (material.isNotEmpty) {
+        commands.add('SET_MATERIAL LANE=$laneName MATERIAL=$material');
+      }
+      if (color.isNotEmpty) {
+        // Ensure color is just the hex code without #
+        final cleanColor = color.replaceAll('#', '');
+        commands.add('SET_COLOR LANE=$laneName COLOR=$cleanColor');
+      }
+    }
+
+    for (var cmd in commands) {
+      await sendCommand(printerId, '/printer/gcode/script?script=${Uri.encodeComponent(cmd)}');
+    }
+  }
+
+  Future<void> afcAction(String printerId, String action, {int? laneId}) async {
+    String cmd;
+    final String laneName = laneId != null ? 'lane$laneId' : '';
+    
+    switch (action.toLowerCase()) {
+      case 'load':
+        cmd = 'AFC_LOAD LANE=$laneName';
+        break;
+      case 'unload':
+        cmd = 'AFC_UNLOAD'; // Usually unloads current active lane
+        break;
+      case 'eject':
+        cmd = 'AFC_EJECT';
+        break;
+      default:
+        return;
+    }
+    
+    await sendCommand(printerId, '/printer/gcode/script?script=${Uri.encodeComponent(cmd)}');
   }
 
   Future<void> deletePrinter(String id) async {
