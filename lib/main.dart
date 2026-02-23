@@ -4,6 +4,8 @@ import 'providers/printer_provider.dart';
 import 'services/notification_service.dart';
 import 'services/background_service.dart';
 import 'theme/app_theme.dart';
+import 'package:flutter/services.dart';
+import 'package:home_widget/home_widget.dart';
 import 'screens/dashboard_screen.dart';
 
 void main() async {
@@ -35,6 +37,7 @@ class FarmManagerApp extends StatefulWidget {
 
 class _FarmManagerAppState extends State<FarmManagerApp> {
   late final AppLifecycleListener _listener;
+  static const platform = MethodChannel('com.example.farm_manager/widget');
 
   @override
   void initState() {
@@ -42,6 +45,28 @@ class _FarmManagerAppState extends State<FarmManagerApp> {
     _listener = AppLifecycleListener(
       onStateChange: _onStateChanged,
     );
+    
+    platform.setMethodCallHandler((call) async {
+      if (call.method == "triggerPrinterSelection") {
+        _showSelection();
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkWidgetLaunch();
+    });
+  }
+
+  void _showSelection() {
+    // We use a global key or a simpler way to trigger the dialog on the dashboard
+    DashboardScreen.triggerPinDialog();
+  }
+
+  void _checkWidgetLaunch() async {
+    final String? action = await platform.invokeMethod('getIntentAction');
+    if (action == "SELECT_PRINTER") {
+      _showSelection();
+    }
   }
 
   @override
