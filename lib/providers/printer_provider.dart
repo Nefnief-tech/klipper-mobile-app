@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -26,6 +29,8 @@ class PrinterProvider with ChangeNotifier {
   String? get spoolmanUrl => _spoolmanUrl;
   String _themeMode = 'dark';
   String get themeMode => _themeMode;
+  String? _selectedWidgetPrinterId;
+  String? get selectedWidgetPrinterId => _selectedWidgetPrinterId;
 
   String _baseUrl(String ip) {
     String url = ip.trim();
@@ -39,6 +44,7 @@ class PrinterProvider with ChangeNotifier {
 
     _spoolmanUrl = await DatabaseHelper.instance.getSetting('spoolman_url');
     _themeMode = await DatabaseHelper.instance.getSetting('theme_mode') ?? 'dark';
+    _selectedWidgetPrinterId = await DatabaseHelper.instance.getSetting('selected_widget_printer');
     final saved = await DatabaseHelper.instance.fetchPrinters();
     _printers = saved.map((p) => Printer(id: p['id'], name: p['name'], ip: p['ip'])).toList();
     notifyListeners();
@@ -319,17 +325,50 @@ class PrinterProvider with ChangeNotifier {
     }
   }
 
-  void _updateWidget() {
+  Future<void> _updateWidget() async {
     try {
-      final printing = _printers.where((p) => p.status == 'printing').length;
-      final idle = _printers.where((p) => p.status == 'idle').length;
+      if (_printers.isEmpty) return;
 
-      HomeWidget.saveWidgetData<int>('printing_count', printing);
-      HomeWidget.saveWidgetData<int>('idle_count', idle);
-      HomeWidget.updateWidget(
+      // Find selected printer or default to first
+      final printer = _printers.firstWhere(
+        (p) => p.id == _selectedWidgetPrinterId, 
+        orElse: () => _printers.first
+      );
+
+      // Save all data
+      await Future.wait([
+        HomeWidget.saveWidgetData<String>('printer_name', printer.name),
+        HomeWidget.saveWidgetData<String>('printer_status', printer.status),
+        HomeWidget.saveWidgetData<String>('current_file', printer.currentFile ?? ""),
+        HomeWidget.saveWidgetData<String>('nozzle_temp', printer.nozzleTemp.round().toString()),
+        HomeWidget.saveWidgetData<String>('bed_temp', printer.bedTemp.round().toString()),
+      ]);
+
+      // Handle Thumbnail
+      if (printer.thumbnailUrl != null && printer.status == 'printing') {
+        try {
+          final response = await http.get(Uri.parse(printer.thumbnailUrl!)).timeout(const Duration(seconds: 5));
+          if (response.statusCode == 200) {
+            final tempDir = await getTemporaryDirectory();
+            final imageFile = File(p.join(tempDir.path, 'widget_thumb.png'));
+            await imageFile.writeAsBytes(response.bodyBytes);
+            await HomeWidget.saveWidgetData<String>('image_path', imageFile.path);
+          }
+        } catch (e) {
+          await HomeWidget.saveWidgetData<String>('image_path', null);
+        }
+      } else {
+        await HomeWidget.saveWidgetData<String>('image_path', null);
+      }
+
+      // Trigger the native update
+      await HomeWidget.updateWidget(
+        name: 'StatusWidgetProvider', // Use name instead of androidName for better compatibility
         androidName: 'StatusWidgetProvider',
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint("Widget sync failed: $e");
+    }
   }
 
   AFC? _parseAfc(Map<String, dynamic> update, AFC? current) {
@@ -658,6 +697,13 @@ class PrinterProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setWidgetPrinter(String id) async {
+    _selectedWidgetPrinterId = id;
+    await DatabaseHelper.instance.saveSetting('selected_widget_printer', id);
+    _updateWidget();
+    notifyListeners();
+  }
+
   Future<List<Spool>> fetchAllSpools() async {
     // If a global URL is set, use it. Otherwise try printers.
     if (_spoolmanUrl != null && _spoolmanUrl!.isNotEmpty) {
@@ -797,19 +843,101 @@ class PrinterProvider with ChangeNotifier {
     
     switch (action.toLowerCase()) {
       case 'load':
-        cmd = 'AFC_LOAD LANE=$laneName';
+        if (laneId == null) return;
+        // In Klipper AFC, tool selection commands (T0, T1...) trigger the load sequence for that lane
+        cmd = 'T${laneId - 1}';
         break;
       case 'unload':
-        cmd = 'AFC_UNLOAD'; // Usually unloads current active lane
+        // AFC_LANE_RESET is the macro documented to reset a loaded lane to the hub/unit
+        cmd = laneId != null ? 'AFC_LANE_RESET LANE=$laneName' : 'AFC_LANE_RESET';
         break;
       case 'eject':
-        cmd = 'AFC_EJECT';
+        cmd = 'AFC_KICK';
+        break;
+      case 'stats':
+        cmd = 'AFC_STATS';
+        break;
+      case 'cut':
+        cmd = 'AFC_CUT';
+        break;
+      case 'poop':
+        cmd = 'AFC_POOP';
+        break;
+      case 'brush':
+        cmd = 'AFC_BRUSH';
+        break;
+      case 'park':
+        cmd = 'AFC_PARK';
+        break;
+      case 'calibration':
+        cmd = 'CALIBRATE_AFC';
+        break;
+      case 'led_on':
+        cmd = 'TURN_ON_AFC_LED';
+        break;
+      case 'led_off':
+        cmd = 'TURN_OFF_AFC_LED';
+        break;
+      case 'reset_lane':
+        if (laneId == null) return;
+        cmd = 'AFC_LANE_RESET LANE=$laneName';
+        break;
+      case 'reset_mapping':
+        cmd = 'RESET_AFC_MAPPING';
+        break;
+      case 'tip_forming':
+        cmd = 'TEST_AFC_TIP_FORMING';
+        break;
+      case 'quiet_mode':
+        cmd = 'AFC_QUIET_MODE';
+        break;
+      case 'clear_message':
+        cmd = 'AFC_CLEAR_MESSAGE';
+        break;
+      case 'reset_motor_time':
+        cmd = 'AFC_RESET_MOTOR_TIME';
         break;
       default:
         return;
     }
     
     await sendCommand(printerId, '/printer/gcode/script?script=${Uri.encodeComponent(cmd)}');
+  }
+
+  // --- JOB QUEUE & HISTORY ---
+
+  Future<List<dynamic>> fetchJobQueue(String printerId) async {
+    final printer = _printers.firstWhere((p) => p.id == printerId);
+    final baseUrl = _baseUrl(printer.ip);
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/server/job_queue/status'));
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body)['result']['queue'] as List;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<void> queueAction(String printerId, String action, {String? jobIds}) async {
+    final printer = _printers.firstWhere((p) => p.id == printerId);
+    final baseUrl = _baseUrl(printer.ip);
+    // actions: pause, resume, reset, clear, delete
+    await http.post(
+      Uri.parse('$baseUrl/server/job_queue/$action${jobIds != null ? '?job_ids=$jobIds' : ''}'),
+    );
+    refreshPrinter(printerId);
+  }
+
+  Future<List<dynamic>> fetchPrintHistory(String printerId) async {
+    final printer = _printers.firstWhere((p) => p.id == printerId);
+    final baseUrl = _baseUrl(printer.ip);
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/server/history/list?limit=20'));
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body)['result']['jobs'] as List;
+      }
+    } catch (_) {}
+    return [];
   }
 
   Future<void> deletePrinter(String id) async {

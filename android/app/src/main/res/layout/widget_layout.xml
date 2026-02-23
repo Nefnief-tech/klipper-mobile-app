@@ -1,40 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp"
-    android:background="@android:color/black">
+    android:background="@drawable/widget_background"
+    android:padding="12dp">
 
+    <!-- Left: Image -->
+    <ImageView
+        android:id="@+id/widget_image"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_alignParentStart="true"
+        android:layout_centerVertical="true"
+        android:scaleType="centerCrop"
+        android:visibility="gone"
+        android:layout_marginEnd="12dp"
+        android:background="#11ffffff" />
+
+    <!-- Right: Temps (Anchored to right) -->
+    <LinearLayout
+        android:id="@+id/widget_temp_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_centerVertical="true"
+        android:orientation="vertical"
+        android:gravity="end"
+        android:paddingStart="8dp">
+
+        <TextView
+            android:id="@+id/widget_nozzle_temp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0°C"
+            android:textColor="#FF5252"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_bed_temp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0°C"
+            android:textColor="#448AFF"
+            android:textSize="14sp"
+            android:layout_marginTop="2dp" />
+    </LinearLayout>
+
+    <!-- Center: Content -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_centerInParent="true">
+        android:layout_toEndOf="@id/widget_image"
+        android:layout_toStartOf="@id/widget_temp_container"
+        android:layout_centerVertical="true"
+        android:orientation="vertical">
 
         <TextView
-            android:id="@+id/widget_title"
+            android:id="@+id/widget_printer_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="FARM STATUS"
+            android:text="PRINTER"
             android:textColor="#BB86FC"
             android:textStyle="bold"
-            android:textSize="12sp" />
+            android:textSize="12sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
 
         <TextView
-            android:id="@+id/widget_printing"
+            android:id="@+id/widget_printer_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Printing: 0"
+            android:text="OFFLINE"
             android:textColor="@android:color/white"
-            android:textSize="18sp"
-            android:layout_marginTop="4dp"/>
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/widget_idle"
+            android:id="@+id/widget_file_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Idle: 0"
+            android:text="No file"
             android:textColor="#88ffffff"
-            android:textSize="14sp" />
+            android:textSize="11sp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:layout_marginTop="2dp" />
     </LinearLayout>
+
 </RelativeLayout>

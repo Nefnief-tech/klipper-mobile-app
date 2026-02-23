@@ -4,6 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math' as math;
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 import '../providers/printer_provider.dart';
 import '../models/printer.dart';
 import '../widgets/motion_deck.dart';
@@ -21,6 +25,7 @@ class PrinterDetailScreen extends StatefulWidget {
 class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
   bool _webcamError = false;
   DateTime _lastLedUpdate = DateTime.now();
+  String? _activeAction;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +41,22 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
         backgroundColor: Colors.transparent,
         title: Text(printer.name.toUpperCase(), style: GoogleFonts.anton(fontSize: 24)),
         actions: [
+          IconButton(
+            onPressed: () {
+              provider.setWidgetPrinter(printer.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("${printer.name} pinned to home screen widget")),
+              );
+            },
+            icon: Icon(
+              provider.selectedWidgetPrinterId == printer.id 
+                ? LucideIcons.pin 
+                : LucideIcons.pinOff,
+              color: provider.selectedWidgetPrinterId == printer.id 
+                ? Theme.of(context).colorScheme.primary 
+                : null,
+            ),
+          ),
           IconButton(onPressed: () => provider.refreshPrinter(printer.id), icon: const Icon(LucideIcons.refreshCw)),
         ],
       ),
@@ -339,10 +360,38 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
                 const SizedBox(width: 12),
                 Text("BOX TURTLE AFC", style: GoogleFonts.anton(fontSize: 18, letterSpacing: 0.5)),
                 const Spacer(),
+                PopupMenuButton<String>(
+                  onSelected: (val) => provider.afcAction(printer.id, val),
+                  icon: const Icon(LucideIcons.moreHorizontal, size: 20, color: Colors.white38),
+                  color: const Color(0xFF1A1020),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(enabled: false, child: Text("MAINTENANCE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white24))),
+                    const PopupMenuItem(value: 'stats', child: ListTile(leading: Icon(LucideIcons.barChart2, size: 18), title: Text("Statistics", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'brush', child: ListTile(leading: Icon(LucideIcons.wind, size: 18), title: Text("Brush Nozzle", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'cut', child: ListTile(leading: Icon(LucideIcons.scissors, size: 18), title: Text("Cut Tip", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'poop', child: ListTile(leading: Icon(LucideIcons.trash2, size: 18), title: Text("Poop/Purge", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'park', child: ListTile(leading: Icon(LucideIcons.parkingCircle, size: 18), title: Text("Park Toolhead", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'calibration', child: ListTile(leading: Icon(LucideIcons.settings2, size: 18), title: Text("Start Calibration", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'change_blade', child: ListTile(leading: Icon(LucideIcons.wrench, size: 18), title: Text("Blade Changed", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(enabled: false, child: Text("TESTING & MODES", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white24))),
+                    const PopupMenuItem(value: 'test_lanes', child: ListTile(leading: Icon(LucideIcons.testTube, size: 18), title: Text("Run Lane Tests", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'tip_forming', child: ListTile(leading: Icon(LucideIcons.flaskConical, size: 18), title: Text("Test Tip Forming", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'get_td1', child: ListTile(leading: Icon(LucideIcons.database, size: 18), title: Text("Get TD-1 Data", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'quiet_mode', child: ListTile(leading: Icon(LucideIcons.volumeX, size: 18), title: Text("Toggle Quiet Mode", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(enabled: false, child: Text("SYSTEM", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white24))),
+                    const PopupMenuItem(value: 'led_on', child: ListTile(leading: Icon(LucideIcons.lightbulb, size: 18), title: Text("LEDs On", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'led_off', child: ListTile(leading: Icon(LucideIcons.lightbulbOff, size: 18), title: Text("LEDs Off", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'clear_message', child: ListTile(leading: Icon(LucideIcons.eraser, size: 18), title: Text("Clear Messages", style: TextStyle(fontSize: 12)))),
+                    const PopupMenuItem(value: 'reset_mapping', child: ListTile(leading: Icon(LucideIcons.refreshCw, size: 18, color: Colors.orangeAccent), title: Text("Reset Mapping", style: TextStyle(fontSize: 12, color: Colors.orangeAccent)))),
+                    const PopupMenuItem(value: 'reset_motor_time', child: ListTile(leading: Icon(LucideIcons.clock, size: 18, color: Colors.redAccent), title: Text("Reset Motor Time", style: TextStyle(fontSize: 12, color: Colors.redAccent)))),
+                  ],
+                ),
                 TextButton.icon(
                   onPressed: () => provider.afcAction(printer.id, 'eject'),
                   icon: const Icon(LucideIcons.arrowUpFromLine, size: 14),
-                  label: const Text("EJECT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                  label: const Text("KICK", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                   style: TextButton.styleFrom(foregroundColor: Colors.orangeAccent),
                 ),
                 const SizedBox(width: 8),
@@ -608,19 +657,24 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
   
   Widget _buildTabCard(BuildContext context, PrinterProvider provider, Printer printer, bool isPrinting) {
     return DefaultTabController(
-      length: isPrinting ? 2 : 3,
+      length: isPrinting ? 4 : 5,
       child: Card(
+        color: Colors.white.withOpacity(0.02),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Column(children: [
           TabBar(
+            isScrollable: true,
             indicatorColor: Theme.of(context).colorScheme.primary,
             labelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
             tabs: isPrinting 
-              ? const [Tab(text: "CONSOLE"), Tab(text: "OBJECTS")]
-              : const [Tab(text: "FILES"), Tab(text: "MACROS"), Tab(text: "CONTROLS")]
+              ? const [Tab(text: "CONSOLE"), Tab(text: "OBJECTS"), Tab(text: "QUEUE"), Tab(text: "HISTORY")]
+              : const [Tab(text: "FILES"), Tab(text: "MACROS"), Tab(text: "CONTROLS"), Tab(text: "QUEUE"), Tab(text: "HISTORY")]
           ),
           SizedBox(height: 400, child: TabBarView(children: isPrinting ? [
             ConsoleView(printer: printer),
             ObjectsView(printer: printer),
+            _QueueView(printerId: printer.id),
+            _HistoryView(printerId: printer.id),
           ] : [
             // Files
             ListView(padding: const EdgeInsets.all(16), children: [
@@ -628,11 +682,7 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
               ...printer.files.map((f) => ListTile(
                 contentPadding: const EdgeInsets.symmetric(vertical: 4),
                 onTap: () {
-                  final baseUrl = printer.ip.startsWith('http') ? printer.ip : 'http://${printer.ip}';
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => GCodeViewerScreen(
-                    fileName: f.name,
-                    gcodeUrl: '$baseUrl/server/files/gcodes/${Uri.encodeComponent(f.name)}',
-                  )));
+                  _showFileActions(context, provider, printer, f);
                 },
                 leading: Container(
                   width: 48, height: 48,
@@ -646,19 +696,7 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
                   child: f.thumbnailUrl == null ? const Icon(LucideIcons.fileCode, size: 16, color: Colors.white24) : null,
                 ),
                 title: Text(f.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(onPressed: () {
-                      final baseUrl = printer.ip.startsWith('http') ? printer.ip : 'http://${printer.ip}';
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => GCodeViewerScreen(
-                        fileName: f.name,
-                        gcodeUrl: '$baseUrl/server/files/gcodes/${Uri.encodeComponent(f.name)}',
-                      )));
-                    }, icon: const Icon(LucideIcons.eye, size: 16, color: Colors.white38)),
-                    IconButton(onPressed: () => provider.sendCommand(printer.id, '/printer/print/start?filename=${Uri.encodeComponent(f.name)}'), icon: Icon(LucideIcons.play, size: 16, color: Theme.of(context).colorScheme.secondary))
-                  ],
-                )
+                trailing: const Icon(LucideIcons.moreVertical, size: 16, color: Colors.white24),
               ))
             ]),
             GridView.builder(padding: const EdgeInsets.all(16), gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 2.5),
@@ -674,8 +712,77 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
               if (printer.devices.isEmpty) const Center(child: Padding(padding: EdgeInsets.all(40), child: Text("NO DEVICES DETECTED"))),
               ...printer.devices.map((device) => _buildDeviceControl(context, provider, printer, device)),
             ]),
+            _QueueView(printerId: printer.id),
+            _HistoryView(printerId: printer.id),
           ]))
         ]),
+      ),
+    );
+  }
+
+  void _showFileActions(BuildContext context, PrinterProvider provider, Printer printer, GCodeFile file) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _DraggablePopup(
+        title: file.name.toUpperCase(),
+        icon: LucideIcons.fileCode,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              if (file.thumbnailUrl != null)
+                Container(
+                  height: 200,
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    image: DecorationImage(image: NetworkImage(file.thumbnailUrl!), fit: BoxFit.contain),
+                  ),
+                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        provider.sendCommand(printer.id, '/printer/print/start?filename=${Uri.encodeComponent(file.name)}');
+                      },
+                      icon: const Icon(LucideIcons.play),
+                      label: const Text("PRINT NOW"),
+                      style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        provider.sendCommand(printer.id, '/server/job_queue/enqueue?filename=${Uri.encodeComponent(file.name)}');
+                      },
+                      icon: const Icon(LucideIcons.listPlus),
+                      label: const Text("QUEUE"),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                onTap: () {
+                  Navigator.pop(context);
+                  final baseUrl = printer.ip.startsWith('http') ? printer.ip : 'http://${printer.ip}';
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => GCodeViewerScreen(
+                    fileName: file.name,
+                    gcodeUrl: '$baseUrl/server/files/gcodes/${Uri.encodeComponent(file.name)}',
+                  )));
+                },
+                leading: const Icon(LucideIcons.eye),
+                title: const Text("GCODE VIEWER"),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -815,16 +922,91 @@ class _PrinterDetailScreenState extends State<PrinterDetailScreen> {
   }
 
   Widget _buildBottomBar(BuildContext context, PrinterProvider provider, Printer printer) {
-    return Container(padding: const EdgeInsets.all(24), decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(40))),
-      child: Row(children: [
-        Expanded(child: ElevatedButton.icon(onPressed: () => provider.sendCommand(printer.id, printer.status == 'printing' ? '/printer/print/pause' : '/printer/print/resume'), 
-          icon: Icon(printer.status == 'printing' ? LucideIcons.pause : LucideIcons.play), label: Text(printer.status == 'printing' ? "PAUSE" : "RESUME"),
-          style: ElevatedButton.styleFrom(backgroundColor: printer.status == 'printing' ? Colors.orange : Colors.green, foregroundColor: Colors.black, minimumSize: const Size(0, 56)))),
-        const SizedBox(width: 12),
-        IconButton.filled(onPressed: () => provider.sendCommand(printer.id, '/printer/print/cancel'), icon: const Icon(LucideIcons.square), style: IconButton.styleFrom(backgroundColor: Colors.white10, minimumSize: const Size(56, 56))),
-        const SizedBox(width: 12),
-        IconButton.filled(onPressed: () => provider.sendCommand(printer.id, '/printer/emergency_stop'), icon: const Icon(LucideIcons.alertCircle), style: IconButton.styleFrom(backgroundColor: Colors.redAccent, minimumSize: const Size(56, 56))),
-      ]));
+    final bool isPaused = printer.status == 'paused';
+    
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+      ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        child: _activeAction == null 
+          ? Row(
+              key: const ValueKey("buttons"),
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: ElevatedButton.icon(
+                    onPressed: () => setState(() => _activeAction = 'pause'), 
+                    icon: Icon(isPaused ? LucideIcons.play : LucideIcons.pause), 
+                    label: Text(isPaused ? "RESUME" : "PAUSE"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isPaused ? Colors.green : Colors.orange, 
+                      foregroundColor: Colors.black, 
+                      minimumSize: const Size(0, 64),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                IconButton.filled(
+                  onPressed: () => setState(() => _activeAction = 'stop'), 
+                  icon: const Icon(LucideIcons.square), 
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white10, 
+                    minimumSize: const Size(64, 64),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                IconButton.filled(
+                  onPressed: () => setState(() => _activeAction = 'estop'), 
+                  icon: const Icon(LucideIcons.alertCircle), 
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.redAccent, 
+                    minimumSize: const Size(64, 64),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              key: const ValueKey("slider"),
+              children: [
+                Expanded(
+                  child: _SlideAction(
+                    label: _activeAction == 'pause' 
+                        ? (isPaused ? "SLIDE TO RESUME" : "SLIDE TO PAUSE")
+                        : (_activeAction == 'stop' ? "SLIDE TO CANCEL PRINT" : "SLIDE TO EMERGENCY STOP"),
+                    icon: _activeAction == 'pause'
+                        ? (isPaused ? LucideIcons.play : LucideIcons.pause)
+                        : (_activeAction == 'stop' ? LucideIcons.square : LucideIcons.alertCircle),
+                    color: _activeAction == 'pause'
+                        ? (isPaused ? Colors.green : Colors.orange)
+                        : (_activeAction == 'stop' ? Colors.white38 : Colors.redAccent),
+                    onAction: () {
+                      if (_activeAction == 'pause') provider.sendCommand(printer.id, isPaused ? '/printer/print/resume' : '/printer/print/pause');
+                      else if (_activeAction == 'stop') provider.sendCommand(printer.id, '/printer/print/cancel');
+                      else if (_activeAction == 'estop') provider.sendCommand(printer.id, '/printer/emergency_stop');
+                      setState(() => _activeAction = null);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  onPressed: () => setState(() => _activeAction = null),
+                  icon: const Icon(LucideIcons.x),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white10,
+                    minimumSize: const Size(64, 64),
+                  ),
+                )
+              ],
+            ),
+      ),
+    );
   }
 }
 
@@ -838,27 +1020,31 @@ class _DraggablePopup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.4,
-      maxChildSize: 0.9,
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
       builder: (context, scrollController) => Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+          color: const Color(0xFF1A1020),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
         ),
-        padding: const EdgeInsets.all(24),
         child: Column(
           children: [
+            const SizedBox(height: 12),
             Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 24),
-            Row(
-              children: [
-                Icon(icon, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(width: 12),
-                Text(title, style: GoogleFonts.anton(fontSize: 24, letterSpacing: 1)),
-                const Spacer(),
-                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(LucideIcons.x))
-              ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  Icon(icon, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Text(title, style: GoogleFonts.anton(fontSize: 24, letterSpacing: 1)),
+                  const Spacer(),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(LucideIcons.x))
+                ],
+              ),
             ),
             const SizedBox(height: 24),
             Expanded(child: child),
@@ -1106,4 +1292,171 @@ class _ColorWheelPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class _SlideAction extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onAction;
+
+  const _SlideAction({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onAction,
+  });
+
+  @override
+  State<_SlideAction> createState() => _SlideActionState();
+}
+
+class _SlideActionState extends State<_SlideAction> {
+  double _offset = 0.0;
+  bool _completed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double maxOffset = (constraints.maxWidth - 64).clamp(0.0, double.infinity);
+        return Container(
+          height: 64,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Stack(
+            children: [
+              Center(
+                child: Text(
+                  widget.label,
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white38),
+                ),
+              ),
+              Positioned(
+                left: _offset,
+                child: GestureDetector(
+                  onPanUpdate: (details) {
+                    if (_completed) return;
+                    setState(() {
+                      _offset = (_offset + details.delta.dx).clamp(0.0, maxOffset);
+                    });
+                  },
+                  onPanEnd: (details) {
+                    if (_offset > maxOffset * 0.8) {
+                      setState(() {
+                        _offset = maxOffset;
+                        _completed = true;
+                      });
+                      widget.onAction();
+                      Future.delayed(const Duration(seconds: 1), () {
+                        if (mounted) setState(() { _offset = 0; _completed = false; });
+                      });
+                    } else {
+                      setState(() { _offset = 0; });
+                    }
+                  },
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: widget.color,
+                      shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(color: widget.color.withOpacity(0.3), blurRadius: 10)],
+                    ),
+                    child: Icon(widget.icon, color: Colors.black),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _QueueView extends StatelessWidget {
+  final String printerId;
+  const _QueueView({required this.printerId});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = Provider.of<PrinterProvider>(context, listen: false);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Row(
+            children: [
+              TextButton.icon(onPressed: () => provider.queueAction(printerId, 'pause'), icon: const Icon(LucideIcons.pause, size: 14), label: const Text("PAUSE QUEUE", style: TextStyle(fontSize: 10))),
+              TextButton.icon(onPressed: () => provider.queueAction(printerId, 'resume'), icon: const Icon(LucideIcons.play, size: 14), label: const Text("RESUME QUEUE", style: TextStyle(fontSize: 10))),
+              const Spacer(),
+              TextButton.icon(onPressed: () => provider.queueAction(printerId, 'clear'), icon: const Icon(LucideIcons.eraser, size: 14), label: const Text("CLEAR", style: TextStyle(fontSize: 10)), style: TextButton.styleFrom(foregroundColor: Colors.redAccent)),
+            ],
+          ),
+        ),
+        Expanded(
+          child: FutureBuilder<List<dynamic>>(
+            future: provider.fetchJobQueue(printerId),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+              final queue = snapshot.data ?? [];
+              if (queue.isEmpty) return const Center(child: Text("QUEUE EMPTY", style: TextStyle(color: Colors.white24)));
+              
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: queue.length,
+                itemBuilder: (context, i) {
+                  final job = queue[i];
+                  return ListTile(
+                    title: Text(job['filename'], style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    subtitle: Text("ID: ${job['job_id']}", style: const TextStyle(fontSize: 10, color: Colors.white38)),
+                    trailing: IconButton(
+                      onPressed: () => provider.queueAction(printerId, 'delete', jobIds: job['job_id']),
+                      icon: const Icon(LucideIcons.trash2, size: 16, color: Colors.redAccent),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HistoryView extends StatelessWidget {
+  final String printerId;
+  const _HistoryView({required this.printerId});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = Provider.of<PrinterProvider>(context, listen: false);
+    return FutureBuilder<List<dynamic>>(
+      future: provider.fetchPrintHistory(printerId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+        final history = snapshot.data ?? [];
+        if (history.isEmpty) return const Center(child: Text("NO HISTORY", style: TextStyle(color: Colors.white24)));
+        
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: history.length,
+          itemBuilder: (context, i) {
+            final job = history[i];
+            final bool success = job['status'] == 'completed';
+            return ListTile(
+              leading: Icon(success ? LucideIcons.checkCircle : LucideIcons.xCircle, color: success ? Colors.green : Colors.redAccent, size: 16),
+              title: Text(job['filename'], style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              subtitle: Text("${job['status']} - ${((job['finished'] ?? 0) - (job['start_time'] ?? 0)).round()}s", style: const TextStyle(fontSize: 10, color: Colors.white38)),
+            );
+          },
+        );
+      },
+    );
+  }
 }
